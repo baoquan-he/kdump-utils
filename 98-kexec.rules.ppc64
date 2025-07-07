@@ -1,3 +1,7 @@
+# The kernel updates the crash elfcorehdr for CPU and memory changes
+SUBSYSTEM=="cpu", ATTRS{crash_hotplug}=="1", GOTO="kdump_reload_end"
+SUBSYSTEM=="memory", ATTRS{crash_hotplug}=="1", GOTO="kdump_reload_end"
+
 SUBSYSTEM=="cpu", ACTION=="online", GOTO="kdump_reload_cpu"
 SUBSYSTEM=="memory", ACTION=="online", GOTO="kdump_reload_mem"
 SUBSYSTEM=="memory", ACTION=="offline", GOTO="kdump_reload_mem"
@@ -11,7 +15,9 @@ GOTO="kdump_reload_end"
 
 LABEL="kdump_reload_mem"
 
-RUN+="/bin/sh -c '/usr/bin/systemctl is-active kdump.service || exit 0; /usr/bin/systemd-run --quiet --no-block /usr/lib/udev/kdump-udev-throttler'"
+# Don't re-register fadump if /sys/kernel/fadump/hotplug_ready sysfs is set to 1.
+
+RUN+="/bin/sh -c '/usr/bin/systemctl is-active kdump.service || exit 0; ! test -f /sys/kernel/fadump/hotplug_ready || cat /sys/kernel/fadump/hotplug_ready | grep 0 || exit 0; /usr/bin/systemd-run --quiet --no-block /usr/lib/udev/kdump-udev-throttler'"
 
 GOTO="kdump_reload_end"
 

@@ -12,17 +12,19 @@ Describe 'kdump-lib'
 
 		AfterAll 'cleanup'
 
-		ONE_GIGABYTE='000000-3fffffff : System RAM'
+		# 1000MB per block
+		MEMORY_BLOCK='000000-3e800000 : System RAM'
 		Parameters
-			1
-			3
+			1 1
+			3 3
+			6 5
 		End
 
 		It 'should return correct system RAM size'
 			echo -n >"$PROC_IOMEM"
-			for _ in $(seq 1 "$1"); do echo "$ONE_GIGABYTE" >>"$PROC_IOMEM"; done
+			for _ in $(seq 1 "$1"); do echo "$MEMORY_BLOCK" >>"$PROC_IOMEM"; done
 			When call get_system_size
-			The output should equal "$1"
+			The output should equal "$2"
 		End
 
 	End
@@ -51,11 +53,11 @@ Describe 'kdump-lib'
 	Describe "_crashkernel_add()"
 		Context "For valid input values"
 			Parameters
-				"1G-4G:256M,4G-64G:320M,64G-:576M" "100M" "1G-4G:356M,4G-64G:420M,64G-:676M"
-				"1G-4G:256M" "100" "1G-4G:268435556" # avoids any rounding when size % 1024 != 0
-				"1G-4G:256M,4G-64G:320M,64G-:576M@4G" "100M" "1G-4G:356M,4G-64G:420M,64G-:676M@4G"
-				"1G-4G:1G,4G-64G:2G,64G-:3G@4G" "100M" "1G-4G:1124M,4G-64G:2148M,64G-:3172M@4G"
-				"1G-4G:10000K,4G-64G:20000K,64G-:40000K@4G" "100M" "1G-4G:112400K,4G-64G:122400K,64G-:142400K@4G"
+				"2G-4G:256M,4G-64G:320M,64G-:576M" "100M" "2G-4G:356M,4G-64G:420M,64G-:676M"
+				"2G-4G:256M" "100" "2G-4G:268435556" # avoids any rounding when size % 1024 != 0
+				"2G-4G:256M,4G-64G:320M,64G-:576M@4G" "100M" "2G-4G:356M,4G-64G:420M,64G-:676M@4G"
+				"2G-4G:1G,4G-64G:2G,64G-:3G@4G" "100M" "2G-4G:1124M,4G-64G:2148M,64G-:3172M@4G"
+				"2G-4G:10000K,4G-64G:20000K,64G-:40000K@4G" "100M" "2G-4G:112400K,4G-64G:122400K,64G-:142400K@4G"
 				"1,high" "1" "2,high"
 				"1K,low" "1" "1025,low"
 				"128G-1T:4G" "0" "128G-1T:4G"
@@ -74,7 +76,7 @@ Describe 'kdump-lib'
 		End
 		Context "For invalid input values"
 			Parameters
-				"1G-4G:256M.4G-64G:320M" "100M"
+				"2G-4G:256M.4G-64G:320M" "100M"
 				"foo" "1"
 				"1" "bar"
 			End
@@ -115,6 +117,19 @@ Describe 'kdump-lib'
 		It "Test $1: should generate the correct kernel command line"
 			When call prepare_cmdline "$2" "$3" "$4"
 			The output should equal "$5 $add"
+		End
+	End
+
+	Describe "get_kdump_mntpoint_from_target"
+		get_mntpoint_from_target() {
+			echo -n "/"
+		}
+
+
+		# the fips dracut module requires this when there is no boot partition
+		It 'should make sure root partition will be mounted to /sysroot'
+			When call get_kdump_mntpoint_from_target "/dev/vda2"
+			The output should equal "/sysroot"
 		End
 	End
 

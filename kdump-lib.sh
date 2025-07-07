@@ -10,6 +10,7 @@ fi
 
 FADUMP_ENABLED_SYS_NODE="/sys/kernel/fadump/enabled"
 FADUMP_REGISTER_SYS_NODE="/sys/kernel/fadump/registered"
+FADUMP_APPEND_ARGS_SYS_NODE="/sys/kernel/fadump/bootargs_append"
 
 is_uki()
 {
@@ -18,7 +19,7 @@ is_uki()
 	img="$1"
 
 	[[ -f "$img" ]] || return
-	[[ "$(file -b --mime-type "$img")" == application/x-dosexec ]] || return
+	[[ "$(objdump -a "$img" 2> /dev/null)" =~ pei-(x86-64|aarch64-little) ]] || return
 	objdump -h -j .linux "$img" &> /dev/null
 }
 
@@ -43,25 +44,9 @@ is_sme_or_sev_active()
 	journalctl -q --dmesg --grep "^Memory Encryption Features active: AMD (SME|SEV)$" >/dev/null 2>&1
 }
 
-is_squash_available()
-{
-	local _version kmodule
-
-	_version=$(_get_kdump_kernel_version)
-	for kmodule in squashfs overlay loop; do
-		modprobe -S "$_version" --dry-run $kmodule &> /dev/null || return 1
-	done
-}
-
 has_command()
 {
 	[[ -x $(command -v "$1") ]]
-}
-
-dracut_have_option()
-{
-	local _option=$1
-	! dracut "$_option" 2>&1 | grep -q "unrecognized option"
 }
 
 perror_exit()
@@ -221,7 +206,7 @@ get_bind_mount_source()
 
 	_fsroot=${_src#"${_src_nofsroot}"[}
 	_fsroot=${_fsroot%]}
-	_mnt=$(get_mount_info TARGET source "$_src_nofsroot" -f)
+	_mnt=$(get_mntpoint_from_target "$_src_nofsroot")
 
 	# for btrfs, _fsroot will also contain the subvol value as well, strip it
 	if [[ $_fstype == btrfs ]]; then
@@ -726,7 +711,6 @@ _cmdline_parse()
 #
 # prepare_cmdline <commandline> <commandline remove> <commandline append>
 # This function performs a series of edits on the command line.
-# Store the final result in global $KDUMP_COMMANDLINE.
 prepare_cmdline()
 {
 	local in out append opt val id drv
@@ -802,7 +786,7 @@ prepare_cmdline()
 
 	# This is a workaround on AWS platform. Always remove irqpoll since it
 	# may cause the hot-remove of some pci hotplug device.
-	is_aws_aarch64 && out=$(echo "$out" | sed -e "/\<irqpoll\>//")
+	is_aws_aarch64 && out=$(echo "$out" | sed -e "s/\<irqpoll\>//")
 
 	# Always disable gpt-auto-generator as it hangs during boot of the
 	# crash kernel. Furthermore we know which disk will be used for dumping
@@ -817,8 +801,11 @@ PROC_IOMEM=/proc/iomem
 #get system memory size i.e. memblock.memory.total_size in the unit of GB
 get_system_size()
 {
-	sum=$(sed -n "s/\s*\([0-9a-fA-F]\+\)-\([0-9a-fA-F]\+\) : System RAM$/+ 0x\2 - 0x\1 + 1/p" $PROC_IOMEM)
-	echo $(( (sum) / 1024 / 1024 / 1024))
+	local _mem_size_mb _sum
+	_sum=$(sed -n "s/\s*\([0-9a-fA-F]\+\)-\([0-9a-fA-F]\+\) : System RAM$/+ 0x\2 - 0x\1 + 1/p" $PROC_IOMEM)
+	_mem_size_mb=$(( (_sum) / 1024 / 1024 ))
+	# rounding up the total_size to 128M to align with kernel code kernel/crash_reserve.c
+	echo $(((_mem_size_mb + 127) / 128 * 128 / 1024 ))
 }
 
 # Return the recommended size for the reserved crashkernel memory
@@ -1021,13 +1008,13 @@ kdump_get_arch_recommend_crashkernel()
 	_arch=$(uname -m)
 
 	if [[ $_arch == "x86_64" ]] || [[ $_arch == "s390x" ]]; then
-		_ck_cmdline="1G-4G:192M,4G-64G:256M,64G-:512M"
+		_ck_cmdline="2G-64G:256M,64G-:512M"
 		is_sme_or_sev_active && ((_delta += 64))
 	elif [[ $_arch == "aarch64" ]]; then
 		local _running_kernel
 
 		# Base line for 4K variant kernel. The formula is based on x86 plus extra = 64M
-		_ck_cmdline="1G-4G:256M,4G-64G:320M,64G-:576M"
+		_ck_cmdline="2G-4G:256M,4G-64G:320M,64G-:576M"
 		if [[ -z "$2" ]]; then
 			_running_kernel=$(_get_kdump_kernel_version)
 		else
@@ -1037,7 +1024,7 @@ kdump_get_arch_recommend_crashkernel()
 		# the naming convention of 64k variant suffixes with +64k, e.g. "vmlinuz-5.14.0-312.el9.aarch64+64k"
 		if echo "$_running_kernel" | grep -q 64k; then
 			# Without smmu, the diff of MemFree between 4K and 64K measured on a high end aarch64 machine is 82M.
-			# Picking up 100M to cover this diff. And finally, we have "1G-4G:356M;4G-64G:420M;64G-:676M"
+			# Picking up 100M to cover this diff. And finally, we have "2G-4G:356M;4G-64G:420M;64G-:676M"
 			((_delta += 100))
 			# On a 64K system, the extra 384MB is calculated by: cmdq_num * 16 bytes + evtq_num * 32B + priq_num * 16B
 			# While on a 4K system, it is negligible

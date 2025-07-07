@@ -2,16 +2,15 @@
 Description=Crash recovery kernel arming
 After=network.target network-online.target remote-fs.target basic.target
 DefaultDependencies=no
-ConditionKernelCommandLine=crashkernel
 
 [Service]
 Type=oneshot
+ExecCondition=/bin/sh -c 'grep -q -e "crashkernel" -e "fadump" /proc/cmdline'
 ExecStart=/usr/bin/kdumpctl start
 ExecStop=/usr/bin/kdumpctl stop
 ExecReload=/usr/bin/kdumpctl reload
 RemainAfterExit=yes
 StartLimitInterval=0
-PrivateTmp=yes
 
 [Install]
 WantedBy=multi-user.target

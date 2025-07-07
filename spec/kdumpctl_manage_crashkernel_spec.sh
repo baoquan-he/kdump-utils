@@ -4,8 +4,8 @@ Describe 'Management of the kernel crashkernel parameter.'
 	Include ./kdumpctl
 	kernel1=/boot/vmlinuz-5.15.6-100.fc34.x86_64
 	kernel2=/boot/vmlinuz-5.14.14-200.fc34.x86_64
-	old_ck=1G-4G:162M,4G-64G:256M,64G-:512M
-	new_ck=1G-4G:196M,4G-64G:256M,64G-:512M
+	old_ck=2G-4G:162M,4G-64G:256M,64G-:512M
+	new_ck=2G-4G:196M,4G-64G:256M,64G-:512M
 	KDUMP_SPEC_TEST_RUN_DIR=$(mktemp -u /tmp/spec_test.XXXXXXXXXX)
 	GRUB_CFG="$KDUMP_SPEC_TEST_RUN_DIR/grub.cfg"
 
@@ -63,9 +63,9 @@ Describe 'Management of the kernel crashkernel parameter.'
 		[[ "$1" == grubby ]]
 	}
 
-	Describe "When kexec-tools have its default crashkernel updated, "
+	Describe "When kdump-utils have its default crashkernel updated, "
 
-		Context "if kexec-tools is updated alone, "
+		Context "if kdump-utils is updated alone, "
 			BeforeAll 'setup'
 			AfterAll 'cleanup'
 			Specify 'reset_crashkernel_after_update should report updated kernels and note that auto_reset_crashkernel=yes'

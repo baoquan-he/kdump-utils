@@ -31,6 +31,10 @@ KDUMP_COMMANDLINE_REMOVE="hugepages hugepagesz slub_debug quiet log_buf_len swio
 # after processed by KDUMP_COMMANDLINE_REMOVE
 KDUMP_COMMANDLINE_APPEND="irqpoll maxcpus=1 reset_devices novmcoredd cma=0 hugetlb_cma=0"
 
+# This variable lets us append arguments to fadump (powerpc) capture kernel,
+# further to the parameters passed via the bootloader.
+FADUMP_COMMANDLINE_APPEND=""
+
 # Any additional kexec arguments required.  In most situations, this should
 # be left empty
 #
@@ -46,6 +50,10 @@ KDUMP_IMG="vmlinuz"
 
 #What is the images extension.  Relocatable kernels don't have one
 KDUMP_IMG_EXT=""
+
+# Enable vmcore creation notification by default, disable by setting
+# VMCORE_CREATION_NOTIFICATION=""
+VMCORE_CREATION_NOTIFICATION="yes"
 
 # Logging is controlled by following variables in the first kernel:
 #   - @var KDUMP_STDLOGLVL - logging level to standard error (console output)
@@ -88,11 +96,13 @@ ppc64)
 		"irqpoll maxcpus=1 noirqdistrib reset_devices cgroup_disable=memory numa=off udev.children-max=2 ehea.use_mcs=0 panic=10 kvm_cma_resv_ratio=0 transparent_hugepage=never novmcoredd hugetlb_cma=0"
 	;;
 ppc64le)
-	update_param KEXEC_ARGS "--dt-no-old-root -s"
+	update_param KEXEC_ARGS "-s"
 	update_param KDUMP_COMMANDLINE_REMOVE \
 		"hugepages hugepagesz slub_debug quiet log_buf_len swiotlb hugetlb_cma ignition.firstboot"
 	update_param KDUMP_COMMANDLINE_APPEND \
 		"irqpoll nr_cpus=1 noirqdistrib reset_devices cgroup_disable=memory numa=off udev.children-max=2 ehea.use_mcs=0 panic=10 kvm_cma_resv_ratio=0 transparent_hugepage=never novmcoredd hugetlb_cma=0"
+	update_param FADUMP_COMMANDLINE_APPEND \
+		"nr_cpus=16 numa=off cgroup_disable=memory cma=0 kvm_cma_resv_ratio=0 hugetlb_cma=0 transparent_hugepage=never novmcoredd udev.children-max=2"
 	;;
 s390x)
 	update_param KEXEC_ARGS "-s"
@@ -104,7 +114,7 @@ s390x)
 x86_64)
 	update_param KEXEC_ARGS "-s"
 	update_param KDUMP_COMMANDLINE_APPEND \
-		"irqpoll nr_cpus=1 reset_devices cgroup_disable=memory mce=off numa=off udev.children-max=2 panic=10 acpi_no_memhotplug transparent_hugepage=never nokaslr hest_disable novmcoredd cma=0 hugetlb_cma=0"
+		"irqpoll nr_cpus=1 reset_devices cgroup_disable=memory mce=off numa=off udev.children-max=2 panic=10 acpi_no_memhotplug transparent_hugepage=never nokaslr hest_disable novmcoredd cma=0 hugetlb_cma=0 pcie_ports=compat"
 	;;
 *)
 	echo "Warning: Unknown architecture '$1', using default sysconfig template." >&2
